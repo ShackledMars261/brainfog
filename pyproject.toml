@@ -1,13 +1,22 @@
 [project]
 name = "brainfog"
-version = "0.1.0"
-description = "A custom high level language to make writing BrainFuck better."
+authors = [
+    {name = "ShackledMars261"}
+]
+license = {text = "MIT"}
+version = "0.1.0b1"
+description = "A custom high level language to make writing Brainfuck better"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "rich>=14.2.0",
     "typer>=0.20.0",
 ]
+keywords = ["brainfuck","compiler","compile","esolang","high-level","esoteric","language"]
+
+[project.urls]
+Homepage = "https://github.com/ShackledMars261/brainfog"
+"Bug Tracker" = "https://github.com/ShackledMars261/brainfog/issues"
 
 [project.scripts]
 brainfog = "brain_fog.main:app"

@@ -135,16 +135,15 @@ class BrainFogCompiler:
             "DIVMOD_2": 6,
             "DIVMOD_3": 7,
             "DIVMOD_4": 8,
-            "IF_1": 9,
-            "COMPARISON_INPUT_1": 10,
-            "COMPARISON_INPUT_2": 11,
-            "COMPARISON_TEMP_1": 12,
-            "COMPARISON_TEMP_2": 13,
-            "COMPARISON_TEMP_3": 14,
-            "COMPARISON_TEMP_4": 15,
-            "COMPARISON_TEMP_5": 16,
-            "COMPARISON_TEMP_6": 17,
-            "GENERAL_TEMP_1": 18,
+            "COMPARISON_INPUT_1": 9,
+            "COMPARISON_INPUT_2": 10,
+            "COMPARISON_TEMP_1": 11,
+            "COMPARISON_TEMP_2": 12,
+            "COMPARISON_TEMP_3": 13,
+            "COMPARISON_TEMP_4": 14,
+            "COMPARISON_TEMP_5": 15,
+            "COMPARISON_TEMP_6": 16,
+            "GENERAL_TEMP_1": 17,
         }
         self.var_offset: int = len(self.reserved_cells)
 
@@ -179,10 +178,20 @@ class BrainFogCompiler:
         """
         data: List[str] = input.split("\n")
         lines: List[str] = []
-        for line in data:
-            line = line.split("//", 1)[0]
 
+        block_depth: int = 0
+
+        for line in data:
             line = line.strip()
+
+            if line.startswith("if"):
+                self.__reserve_new_cell(f"IF_{block_depth}")
+                block_depth += 1
+
+            if line.startswith("endif"):
+                block_depth -= 1
+
+            line = line.split("//", 1)[0]
 
             if line == "":
                 continue
@@ -192,6 +201,11 @@ class BrainFogCompiler:
         self.__parse_lines(lines)
 
         return self.__compile_instructions()
+
+    def __reserve_new_cell(self, key: str) -> None:
+        self.__print(f"Reserving cell {key}: {self.var_offset}")
+        self.reserved_cells[key] = self.var_offset
+        self.var_offset = len(self.reserved_cells)
 
     def __optimize_instruction(self, instruction: str) -> str:
         output: str = copy.deepcopy(instruction)
@@ -274,8 +288,9 @@ class BrainFogCompiler:
             self.__print(f"{name} = {var}")
 
     def __end_if_statement(self, args) -> None:
+        self.__print(f"END_IF: getting IF_{self.current_block_depth - 1}")
         temp_index_1: int = self.reserved_cells[
-            "IF_1"
+            f"IF_{self.current_block_depth - 1}"
         ]  # stores result of comparison (x)
         instruction: str = ""
         instruction += self.__clear_cell(temp_index_1)
@@ -294,8 +309,9 @@ class BrainFogCompiler:
         comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
         value_2_type: BrainFogUserDataType = BrainFogUserDataType(args[3])
         value_2_value_str: str = args[4][:-1]
+        self.__print(f"BEGIN_IF: getting IF_{self.current_block_depth}")
         temp_index_1: int = self.reserved_cells[
-            "IF_1"
+            f"IF_{self.current_block_depth}"
         ]  # stores result of comparison (x)
         temp_index_2: int = self.reserved_cells["COMPARISON_INPUT_1"]
         temp_index_3: int = self.reserved_cells["COMPARISON_INPUT_2"]
@@ -978,7 +994,9 @@ class BrainFogCompiler:
             case "byte[]":
                 value_args: List[str] = args[3:]
                 value_str: str = " ".join(value_args)
-                new_values: List[str] = value_str[1:-1]
+                new_values: List[str] = list(
+                    value_str[1:-1].encode().decode("unicode_escape")
+                )
                 instruction += "".join(
                     [
                         self.__set_cell_to_value(

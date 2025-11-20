@@ -5,7 +5,7 @@ from .src.version import app as version_app
 from .src.version import print_version_basic
 
 app = typer.Typer(
-    help="BrainFog: A custom high level language to make writing BrainFuck better.",
+    help="BrainFog: A custom high level language to make writing Brainfuck better.",
     invoke_without_command=True,
 )
 
