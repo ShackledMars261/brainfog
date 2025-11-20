@@ -3,8 +3,8 @@ set x = byte[] "Hello, World!\n"
 var y byte[11]
 set y = byte[] "Testing123!"
 
-if (byte "A" != int 64) // the decimal representation of "A" is 65, so this is True
-if (int 1 >= int 0)
+if (int 1 >= int 0) # True
+if (byte "A" != int 65) // the decimal representation of "A" is 65, so this is False
     print x
 endif
     print y
