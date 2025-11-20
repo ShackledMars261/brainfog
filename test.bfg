@@ -1,0 +1,39 @@
+// this is a comment
+
+// var declaration- var VAR_NAME VAR_TYPE
+// byte declaration- byte
+var x byte
+// byte array declaration- byte[length]
+var y byte[10]
+// integer declaration- int
+var z int
+
+// raw "++[>+<-]>--<" // run raw brainfuck (currently commented out for testing)
+
+// var assignment
+set x = byte "a"
+set z = int 10
+set y = byte[] "abcde"
+set y = var x
+
+var a int
+set a = int 2
+var b int
+set b = int 4
+var c int
+set c = int 0 // this will be our output for testing
+
+// basic arithmetic
+add a b c
+sub b a c
+mul b a c
+div b a c
+mod b a c
+pow b a c
+
+read 10 y // (opcode, amount to chars to read, var to write to)
+print y // (opcode, var to read from)
+
+if (var x == byte "a")
+    print y
+endif

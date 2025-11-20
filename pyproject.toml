@@ -1,0 +1,21 @@
+[project]
+name = "brainfog"
+version = "0.1.0"
+description = "A custom high level language to make writing BrainFuck better."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "rich>=14.2.0",
+    "typer>=0.20.0",
+]
+
+[project.scripts]
+brainfog = "brain_fog.main:app"
+
+[build-system]
+requires = ["uv_build>=0.9.10,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "brain_fog"
+module-root = ""

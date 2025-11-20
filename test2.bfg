@@ -1,0 +1,8 @@
+var x byte[13]
+set x = byte[] "Hello, World!"
+
+if (byte "A" != int 64) // the decimal representation of "A" is 65, so this is True
+if (int 1 > int 0)
+    print x
+endif
+endif
