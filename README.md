@@ -2,7 +2,8 @@
 
 A custom high level language to make writing Brainfuck better.
 
-Language Documentation is located [here](language_docs.md)
+Language Documentation is located [here](language_docs.md).  
+Examples can be found in the [examples](./examples/) directory.
 
 ## Installation
 ```sh

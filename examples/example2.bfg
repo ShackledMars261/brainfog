@@ -5,7 +5,7 @@ set y = byte[] "Testing123!"
 
 if (int 1 >= int 0) # True
 if (byte "A" != int 65) // the decimal representation of "A" is 65, so this is False
-    print x
+    print x // Won't run since the conditional was false
 endif
-    print y
+    print y // Will run!
 endif
