@@ -7,6 +7,7 @@ from .src.version import print_version_basic
 app = typer.Typer(
     help="BrainFog: A custom high level language to make writing Brainfuck better.",
     invoke_without_command=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 app.add_typer(compile_app)
@@ -23,20 +24,9 @@ def main(
         help="Prints the version of the package.",
         is_eager=True,
     ),
-    help: bool = typer.Option(
-        False,
-        "--help",
-        "-h",
-        help="Show this message and exit.",
-        is_eager=True,
-    ),
 ):
     if version:
         print_version_basic()
-        raise typer.Exit()
-
-    if help:
-        typer.echo(ctx.get_help())
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None and not ctx.params["version"]:
