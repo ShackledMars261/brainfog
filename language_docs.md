@@ -22,7 +22,7 @@ Variable assignment to other variable's value:
 set VAR_NAME = var TARGET_VAR_NAME
 
 Variable types:
-byte, byte[] (hopefully), integer
+byte, byte[], integer, boolean
 
 Arithmetic:
 add/sub/mul/div/mod/pow a b c (sets c = a <specified operation> b)
@@ -40,6 +40,12 @@ Comparison Operators:
 <= - LTE
 == - EQUAL
 != - NOT_EQUAL
+and - BOOL_AND
+or - BOOL_OR
+xor - BOOL_XOR
+nand - BOOL_NAND
+nor - BOOL_NOR
+xnor - BOOL_XNOR
 
 If statements:
 if (TYPE VALUE COMPARISON_OPERATOR TYPE VALUE) (ex. "var x > int 3")

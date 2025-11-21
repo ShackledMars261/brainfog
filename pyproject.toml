@@ -4,7 +4,7 @@ authors = [
     {name = "ShackledMars261"}
 ]
 license = {text = "MIT"}
-version = "0.0.7"
+version = "0.1.0"
 description = "A custom high level language to make writing Brainfuck better"
 readme = "README.md"
 requires-python = ">=3.13"

@@ -154,28 +154,7 @@ class BrainFogCompiler:
         self.output_str: str = ""
         self.current_pointer_location: int = 0
         self.current_block_depth: int = 0
-        """
-        self.reserved_cells: Dict[str, int] = {  # Cell Reservations
-            "COPYING": 0,
-            "MULT_1": 1,
-            "MULT_2": 2,
-            "POW_1": 3,
-            "DIVMOD_1": 4,
-            "DIVMOD_2": 5,
-            "DIVMOD_3": 6,
-            "DIVMOD_4": 7,
-            "COMPARISON_INPUT_1": 8,
-            "COMPARISON_INPUT_2": 9,
-            "COMPARISON_TEMP_1": 10,
-            "COMPARISON_TEMP_2": 11,
-            "COMPARISON_TEMP_3": 12,
-            "COMPARISON_TEMP_4": 13,
-            "COMPARISON_TEMP_5": 14,
-            "COMPARISON_TEMP_6": 15,
-            "GENERAL_TEMP_1": 16,
-            "GENERAL_TEMP_2": 17,
-        }
-        """
+
         self.reserved_cells: Dict[str, int] = {}
         self.var_offset: int = len(self.reserved_cells)
         self.bool_in_code: bool = False
@@ -444,15 +423,6 @@ class BrainFogCompiler:
                         "GENERAL_TEMP_1",
                     ]
                 )
-
-    """
-    BOOL_AND = "and"
-    BOOL_OR = "or"
-    BOOL_NAND = "nand"
-    BOOL_NOR = "nor"
-    BOOL_XOR = "xor"
-    BOOL_XNOR = "xnor"
-    """
 
     def __reserve_cells(self, keys: List[str]) -> None:
         for key in keys:

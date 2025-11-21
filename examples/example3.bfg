@@ -1,10 +1,10 @@
 // Booleans!
 var providing_var int
 set providing_var = int 15
-var test_bool bool
-set test_bool = bool TRUE
+var my_bool bool
+set my_bool = bool TRUE
 
-set test_bool = var providing_var
+set my_bool = var providing_var
 
 var num_offset int
 set num_offset = int 48
@@ -12,9 +12,9 @@ var line_break byte[1]
 set line_break = byte[] "\n"
 
 var result int
-add test_bool num_offset result
+add my_bool num_offset result
 
-if (bool TRUE xnor bool TRUE)
+if (var my_bool xnor bool TRUE)
     print result
     print line_break
 endif
