@@ -1,11 +1,47 @@
-var x byte[14]
-set x = byte[] "Hello, World!\n"
-var y byte[11]
-set y = byte[] "Testing123!"
+var prompt byte[34]
+set prompt = byte[] "What's your single digit number?: "
+var line_break byte[1]
+set line_break = byte[] "\n"
 
-if (int 1 >= int 0) # True
-if (byte "A" != int 65) // the decimal representation of "A" is 65, so this is False
-    print x // Won't run since the conditional was false
+var unfixed_response byte
+
+print prompt
+read 1 unfixed_response
+// print line_break
+
+var num_offset int
+set num_offset = int 48
+
+var fixed_response int
+sub unfixed_response num_offset fixed_response
+
+var resp_part1 byte[13]
+set resp_part1 = byte[] "Your number \""
+
+var gt_resp_part2 byte[19]
+set gt_resp_part2 = byte[] "\" is larger than 5!"
+
+var lt_resp_part2 byte[20]
+set lt_resp_part2 = byte[] "\" is smaller than 5!"
+
+var eq_resp byte[17]
+set eq_resp = byte[] "Your number is 5!"
+
+if (var fixed_response > int 5)
+print resp_part1
+print unfixed_response
+print gt_resp_part2
+print line_break
 endif
-    print y // Will run!
+
+if (var fixed_response < int 5)
+print resp_part1
+print unfixed_response
+print lt_resp_part2
+print line_break
+endif
+
+if (var fixed_response == int 5)
+print eq_resp
+print line_break
 endif

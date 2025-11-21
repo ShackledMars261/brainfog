@@ -1,17 +1,7 @@
 # Brain Fog Language Docs
 ```
-Reserved cells:
-0-16: Various uses:
-- 0: used for copying variables non-destructively
-- 1-2: used in multiplication/exponentiation
-- 3: used in exponentiation
-- 4-7: used in division/modulo
-- 8-9: used as input for comparisons
-- 10-15: used in comparisons
-- 16: held as a temporary cell for any operation to use
-17-16+n: used as a callback for if statements, if your bfg code contains any (n = max depth of blocks (nested ifs))
-17+n-17+n+m: Variables (m = sum of all variables lengths)
-18+n+m-30,000: Unreserved
+Reserved cells: 
+- As of v0.0.6, reserved cells are now found dynamically based on which ones are actually necessary to run your script
 
 Variable declaration:
 var VAR_NAME VAR_TYPE

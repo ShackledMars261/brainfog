@@ -125,6 +125,7 @@ class BrainFogCompiler:
         self.output_str: str = ""
         self.current_pointer_location: int = 0
         self.current_block_depth: int = 0
+        """
         self.reserved_cells: Dict[str, int] = {  # Cell Reservations
             "COPYING": 0,
             "MULT_1": 1,
@@ -144,6 +145,8 @@ class BrainFogCompiler:
             "COMPARISON_TEMP_6": 15,
             "GENERAL_TEMP_1": 16,
         }
+        """
+        self.reserved_cells: Dict[str, int] = {}
         self.var_offset: int = len(self.reserved_cells)
 
     def __print(self, *args, **kwargs) -> None:
@@ -183,6 +186,11 @@ class BrainFogCompiler:
         for line in data:
             line = line.strip()
 
+            line = line.split("//", 1)[0]  # remove comments
+
+            if line == "":  # remove empty lines
+                continue
+
             if line.startswith("if"):
                 self.__reserve_new_cell(f"IF_{block_depth}")
                 block_depth += 1
@@ -190,16 +198,140 @@ class BrainFogCompiler:
             if line.startswith("endif"):
                 block_depth -= 1
 
-            line = line.split("//", 1)[0]  # remove comments
-
-            if line == "":  # remove empty lines
-                continue
+            self.__reserve_cells_for_line(line)
 
             lines.append(line)
 
         self.__parse_lines(lines)
 
         return self.__compile_instructions()
+
+    def __reserve_cells_for_line(self, line: str) -> None:
+        line_parts: List[str] = line.split(" ")
+        opcode: str = OpCode[line_parts[0].upper()]
+        args: List[str] = line_parts[1:]
+        match opcode:
+            case OpCode.VAR:  # reserved_cells used: none
+                pass
+            case OpCode.READ:  # reserved_cells used: none
+                pass
+            case OpCode.PRINT:  # reserved_cells used: none
+                pass
+            case OpCode.SET:  # reserved_cells used: none
+                pass
+            case OpCode.ADD:  # reserved_cells used: COPYING
+                self.__reserve_cells(["COPYING"])
+            case OpCode.SUB:  # reserved_cells used: COPYING
+                self.__reserve_cells(["COPYING"])
+            case OpCode.MUL:  # reserved_cells used: COPYING, MULT_1, MULT_2
+                self.__reserve_cells(["COPYING", "MULT_1", "MULT_2"])
+            case (
+                OpCode.DIV
+            ):  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4
+                self.__reserve_cells(
+                    ["COPYING", "DIVMOD_1", "DIVMOD_2", "DIVMOD_3", "DIVMOD_4"]
+                )
+            case (
+                OpCode.MOD
+            ):  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4
+                self.__reserve_cells(
+                    ["COPYING", "DIVMOD_1", "DIVMOD_2", "DIVMOD_3", "DIVMOD_4"]
+                )
+            case OpCode.POW:  # reserved_cells used: COPYING, MULT_1, MULT_2, POW_1
+                self.__reserve_cells(["COPYING", "MULT_1", "MULT_2", "POW_1"])
+            case OpCode.RAW:  # reserved_cells used: none
+                pass
+            case OpCode.IF:  # reserved_cells used: COPYING, IF_{X} (already handled), COMPARISON_INPUT_1, COMPARISON_INPUT_2, MISC (Check comparison operators)
+                self.__reserve_cells(
+                    ["COPYING", "COMPARISON_INPUT_1", "COMPARISON_INPUT_2"]
+                )
+                self.__reserve_cells_for_if_begin(args)
+            case OpCode.ENDIF:  # reserved_cells used: IF_{X} (already handled)
+                pass
+
+    def __reserve_cells_for_if_begin(self, args: List[str]) -> None:
+        comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
+        match comparison_operator:
+            case ComparisonOperator.GT:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.LT:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.GTE:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.LTE:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.EQUAL:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.NOT_EQUAL:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+
+    def __reserve_cells(self, keys: List[str]) -> None:
+        for key in keys:
+            self.__reserve_new_cell(key)
 
     def __reserve_new_cell(self, key: str) -> None:
         if key not in self.reserved_cells.keys():
@@ -982,16 +1114,16 @@ class BrainFogCompiler:
 
     def __set_variable(self, args) -> None:
         target_var: Variable = self.variables[args[0]]
-        value_type: str = args[2]  # ["int", "byte", "byte[]", "var"]
+        value_type: BrainFogUserDataType = BrainFogUserDataType(args[2])
         instruction: str = ""
         match value_type:
-            case "int":
+            case BrainFogUserDataType.INT:
                 new_value: int = int(args[3])
                 instruction += self.__set_cell_to_value(target_var.index, new_value)
-            case "byte":
+            case BrainFogUserDataType.BYTE:
                 new_value: int = ord(args[3][1])
                 instruction += self.__set_cell_to_value(target_var.index, new_value)
-            case "byte[]":
+            case BrainFogUserDataType.BYTE_ARRAY:
                 value_args: List[str] = args[3:]
                 value_str: str = " ".join(value_args)
                 new_values: List[str] = list(
@@ -1005,7 +1137,7 @@ class BrainFogCompiler:
                         for index, character in enumerate(new_values)
                     ]
                 )
-            case "var":
+            case BrainFogUserDataType.VAR:
                 providing_var: Variable = self.variables[args[3]]
                 instruction += "".join(
                     [
