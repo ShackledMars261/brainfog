@@ -23,9 +23,20 @@ def main(
         help="Prints the version of the package.",
         is_eager=True,
     ),
+    help: bool = typer.Option(
+        False,
+        "--help",
+        "-h",
+        help="Show this message and exit.",
+        is_eager=True,
+    ),
 ):
     if version:
         print_version_basic()
+        raise typer.Exit()
+
+    if help:
+        typer.echo(ctx.get_help())
         raise typer.Exit()
 
     if ctx.invoked_subcommand is None and not ctx.params["version"]:

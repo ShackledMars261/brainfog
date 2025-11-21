@@ -190,9 +190,9 @@ class BrainFogCompiler:
             if line.startswith("endif"):
                 block_depth -= 1
 
-            line = line.split("//", 1)[0]
+            line = line.split("//", 1)[0]  # remove comments
 
-            if line == "":
+            if line == "":  # remove empty lines
                 continue
 
             lines.append(line)
@@ -202,9 +202,10 @@ class BrainFogCompiler:
         return self.__compile_instructions()
 
     def __reserve_new_cell(self, key: str) -> None:
-        self.__print(f"Reserving cell {key}: {self.var_offset}")
-        self.reserved_cells[key] = self.var_offset
-        self.var_offset = len(self.reserved_cells)
+        if key not in self.reserved_cells.keys():
+            self.__print(f"Reserving cell {key}: {self.var_offset}")
+            self.reserved_cells[key] = self.var_offset
+            self.var_offset = len(self.reserved_cells)
 
     def __optimize_instruction(self, instruction: str) -> str:
         output: str = copy.deepcopy(instruction)
