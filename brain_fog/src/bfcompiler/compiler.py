@@ -4,10 +4,11 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Tuple
 
 from .enums import (
-    BrainFogUserDataType,
+    BooleanValue,
     ComparisonOperator,
     OpCode,
     ShiftDirection,
+    UserDataType,
     VarType,
 )
 
@@ -48,11 +49,39 @@ class IntegerVariable(Variable):
     @value.setter
     def value(self, new_value: int):
         if not isinstance(new_value, int):
-            raise ValueError("Value must be an integer")
+            try:
+                new_value: int = int(new_value)
+            except Exception:
+                raise ValueError("Value must be able to be converted to an integer")
+        self._value = new_value
 
     @value.deleter
     def value(self):
         del self._value
+
+
+class BooleanVariable(Variable):
+    def __init__(self, index: int = -1, initial_value: int = 0):
+        super().__init__(type=VarType.BOOL, index=index, length=1)
+        self._value: int = initial_value
+
+    @property
+    def value(self):
+        return self._value
+
+    @value.setter
+    def value(self, new_value: int | bool = True):
+        if isinstance(new_value, bool):
+            new_value: int = 1 if new_value else 0
+        if not isinstance(new_value, int):
+            try:
+                new_value: int = int(new_value)
+            except Exception:
+                raise ValueError("Value must be able to be converted to an integer")
+
+    @value.deleter
+    def value(self):
+        return self._value
 
 
 class ByteVariable(Variable):
@@ -144,10 +173,12 @@ class BrainFogCompiler:
             "COMPARISON_TEMP_5": 14,
             "COMPARISON_TEMP_6": 15,
             "GENERAL_TEMP_1": 16,
+            "GENERAL_TEMP_2": 17,
         }
         """
         self.reserved_cells: Dict[str, int] = {}
         self.var_offset: int = len(self.reserved_cells)
+        self.bool_in_code: bool = False
 
     def __print(self, *args, **kwargs) -> None:
         """Wrapper for print"""
@@ -188,8 +219,15 @@ class BrainFogCompiler:
 
             line = line.split("//", 1)[0]  # remove comments
 
+            line = line.strip()
+
             if line == "":  # remove empty lines
                 continue
+
+            if "bool" in line.lower():
+                if not self.bool_in_code:
+                    self.__print("Boolean Detected! Enabling Boolean Support")
+                    self.bool_in_code = True
 
             if line.startswith("if"):
                 self.__reserve_new_cell(f"IF_{block_depth}")
@@ -217,8 +255,11 @@ class BrainFogCompiler:
                 pass
             case OpCode.PRINT:  # reserved_cells used: none
                 pass
-            case OpCode.SET:  # reserved_cells used: none
-                pass
+            case OpCode.SET:  # reserved_cells used: (COPYING, GENERAL_TEMP_1, GENERAL_TEMP_2) if BOOL in code
+                if self.bool_in_code:
+                    self.__reserve_cells(
+                        ["COPYING", "GENERAL_TEMP_1", "GENERAL_TEMP_2"]
+                    )
             case OpCode.ADD:  # reserved_cells used: COPYING
                 self.__reserve_cells(["COPYING"])
             case OpCode.SUB:  # reserved_cells used: COPYING
@@ -328,6 +369,90 @@ class BrainFogCompiler:
                         "COMPARISON_TEMP_6",
                     ]
                 )
+            case ComparisonOperator.BOOL_AND:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_OR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_NAND:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_NOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_XOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_XNOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+
+    """
+    BOOL_AND = "and"
+    BOOL_OR = "or"
+    BOOL_NAND = "nand"
+    BOOL_NOR = "nor"
+    BOOL_XOR = "xor"
+    BOOL_XNOR = "xnor"
+    """
 
     def __reserve_cells(self, keys: List[str]) -> None:
         for key in keys:
@@ -416,8 +541,21 @@ class BrainFogCompiler:
 
         self.__print(f"Current Block Depth: {self.current_block_depth}")
 
+        self.__print("Variables:", end="")
+        if len(self.variables) == 0:
+            self.__print(" None")
+        else:
+            self.__print()
         for name, var in self.variables.items():
-            self.__print(f"{name} = {var}")
+            self.__print(f" - {name}: {var}")
+
+        self.__print("Reserved Cells:", end="")
+        if len(self.reserved_cells) == 0:
+            self.__print(" None")
+        else:
+            self.__print()
+        for name, cell_index in self.reserved_cells.items():
+            self.__print(f" - {name}: {cell_index}")
 
     def __end_if_statement(self, args) -> None:
         self.__print(f"END_IF: getting IF_{self.current_block_depth - 1}")
@@ -435,11 +573,11 @@ class BrainFogCompiler:
         self.instructions.append((instruction, 0))
 
     def __begin_if_statement(self, args) -> None:
-        value_1_type: BrainFogUserDataType = BrainFogUserDataType(args[0][1:])
+        value_1_type: UserDataType = UserDataType(args[0][1:])
         value_1_value_str: str = args[1]
         value_1_value: int
         comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
-        value_2_type: BrainFogUserDataType = BrainFogUserDataType(args[3])
+        value_2_type: UserDataType = UserDataType(args[3])
         value_2_value_str: str = args[4][:-1]
         self.__print(f"BEGIN_IF: getting IF_{self.current_block_depth}")
         temp_index_1: int = self.reserved_cells[
@@ -457,34 +595,48 @@ class BrainFogCompiler:
         )
 
         match value_1_type:
-            case BrainFogUserDataType.INT:
+            case UserDataType.INT:
                 value_1_value = int(value_1_value_str)
                 instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
-            case BrainFogUserDataType.BYTE:
+            case UserDataType.BOOL:
+                value_1_value = (
+                    1
+                    if BooleanValue(value_1_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
+            case UserDataType.BYTE:
                 value_1_value = ord(value_1_value_str[1])
                 instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
-            case BrainFogUserDataType.BYTE_ARRAY:
+            case UserDataType.BYTE_ARRAY:
                 value_1_value = statistics.mean(
                     [ord(character) for character in value_1_value_str[1:-1]]
                 )
                 instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
-            case BrainFogUserDataType.VAR:
+            case UserDataType.VAR:
                 providing_var: Variable = self.variables[value_1_value_str]
                 instruction += self.__copy_cell(providing_var.index, temp_index_2)
 
         match value_2_type:
-            case BrainFogUserDataType.INT:
+            case UserDataType.INT:
                 value_2_value = int(value_2_value_str)
                 instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
-            case BrainFogUserDataType.BYTE:
+            case UserDataType.BOOL:
+                value_2_value = (
+                    1
+                    if BooleanValue(value_2_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
+            case UserDataType.BYTE:
                 value_2_value = ord(value_2_value_str[1])
                 instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
-            case BrainFogUserDataType.BYTE_ARRAY:
+            case UserDataType.BYTE_ARRAY:
                 value_2_value = statistics.mean(
                     [ord(character) for character in value_2_value_str[1:-1]]
                 )
                 instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
-            case BrainFogUserDataType.VAR:
+            case UserDataType.VAR:
                 providing_var: Variable = self.variables[value_2_value_str]
                 instruction += self.__copy_cell(providing_var.index, temp_index_3)
 
@@ -501,6 +653,18 @@ class BrainFogCompiler:
                 instruction += self.__equal_variables(temp_index_1)
             case ComparisonOperator.NOT_EQUAL:
                 instruction += self.__not_equal_variables(temp_index_1)
+            case ComparisonOperator.BOOL_AND:
+                instruction += self.__bool_and_variables(temp_index_1)
+            case ComparisonOperator.BOOL_OR:
+                instruction += self.__bool_or_variables(temp_index_1)
+            case ComparisonOperator.BOOL_NAND:
+                instruction += self.__bool_nand_variables(temp_index_1)
+            case ComparisonOperator.BOOL_NOR:
+                instruction += self.__bool_nor_variables(temp_index_1)
+            case ComparisonOperator.BOOL_XOR:
+                instruction += self.__bool_xor_variables(temp_index_1)
+            case ComparisonOperator.BOOL_XNOR:
+                instruction += self.__bool_xnor_variables(temp_index_1)
 
         instruction += ">" * temp_index_1
         instruction += "["
@@ -509,6 +673,177 @@ class BrainFogCompiler:
         self.__print(instruction)
         self.current_block_depth += 1
         self.instructions.append((instruction, 0))
+
+    def __bool_xnor_variables(self, output_index: int) -> str:
+        left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        right_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_3"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_4"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [x_storage_index, y_storage_index, output_index]
+        )
+        instruction += self.__copy_cell(left_index, x_storage_index)
+        instruction += self.__copy_cell(right_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(left_index)
+        instruction += self.__convert_cell_to_boolean(right_index)
+        instruction += self.__bool_xor_variables(output_index)
+        instruction += self.__copy_cell(output_index, left_index)
+        instruction += self.__clear_cells([right_index, output_index])
+        instruction += self.__bool_not_variable(output_index)
+        instruction += self.__copy_cell(x_storage_index, left_index)
+        instruction += self.__copy_cell(y_storage_index, right_index)
+
+        return instruction
+
+    def __bool_xor_variables(self, output_index: int) -> str:
+        x_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        y_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        z_index: int = output_index
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_5"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_6"]
+        instruction: str = ""
+        instruction += self.__clear_cells([x_storage_index, y_storage_index, z_index])
+        instruction += self.__copy_cell(x_index, x_storage_index)
+        instruction += self.__copy_cell(y_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(x_index)
+        instruction += self.__convert_cell_to_boolean(y_index)
+        instruction += ">" * x_index
+        instruction += "["
+        instruction += "<" * x_index
+        instruction += ">" * y_index
+        instruction += "-"
+        instruction += "<" * y_index
+        instruction += ">" * x_index
+        instruction += "-]"
+        instruction += "<" * x_index
+        instruction += ">" * y_index
+        instruction += "["
+        instruction += "<" * y_index
+        instruction += ">" * z_index
+        instruction += "+"
+        instruction += "<" * z_index
+        instruction += ">" * y_index
+        instruction += "[-]]"
+        instruction += "<" * y_index
+
+        instruction += self.__copy_cell(x_storage_index, x_index)
+        instruction += self.__copy_cell(y_storage_index, y_index)
+
+        return instruction
+
+    def __bool_nand_variables(self, output_index: int) -> str:
+        left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        right_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_3"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_4"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [x_storage_index, y_storage_index, output_index]
+        )
+        instruction += self.__copy_cell(left_index, x_storage_index)
+        instruction += self.__copy_cell(right_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(left_index)
+        instruction += self.__convert_cell_to_boolean(right_index)
+        instruction += self.__bool_and_variables(output_index)
+        instruction += self.__copy_cell(output_index, left_index)
+        instruction += self.__clear_cells([right_index, output_index])
+        instruction += self.__bool_not_variable(output_index)
+        instruction += self.__copy_cell(x_storage_index, left_index)
+        instruction += self.__copy_cell(y_storage_index, right_index)
+
+        return instruction
+
+    def __bool_nor_variables(self, output_index: int) -> str:
+        left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        right_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_3"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_4"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [x_storage_index, y_storage_index, output_index]
+        )
+        instruction += self.__copy_cell(left_index, x_storage_index)
+        instruction += self.__copy_cell(right_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(left_index)
+        instruction += self.__convert_cell_to_boolean(right_index)
+        instruction += self.__bool_or_variables(output_index)
+        instruction += self.__copy_cell(output_index, left_index)
+        instruction += self.__clear_cells([right_index, output_index])
+        instruction += self.__bool_not_variable(output_index)
+        instruction += self.__copy_cell(x_storage_index, left_index)
+        instruction += self.__copy_cell(y_storage_index, right_index)
+
+        return instruction
+
+    def __bool_or_variables(self, output_index: int) -> str:
+        left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        right_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_5"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_6"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [x_storage_index, y_storage_index, output_index]
+        )
+        instruction += self.__copy_cell(left_index, x_storage_index)
+        instruction += self.__copy_cell(right_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(left_index)
+        instruction += self.__convert_cell_to_boolean(right_index)
+        instruction += ">" * left_index
+        instruction += "["
+        instruction += "<" * left_index
+        instruction += ">" * right_index
+        instruction += "+"
+        instruction += "<" * right_index
+        instruction += ">" * left_index
+        instruction += "-]"
+        instruction += "<" * left_index
+        instruction += ">" * right_index
+        instruction += "[[-]"
+        instruction += "<" * right_index
+        instruction += ">" * output_index
+        instruction += "+"
+        instruction += "<" * output_index
+        instruction += ">" * right_index
+        instruction += "]"
+        instruction += "<" * right_index
+        instruction += self.__copy_cell(x_storage_index, left_index)
+        instruction += self.__copy_cell(y_storage_index, right_index)
+
+        return instruction
+
+    def __bool_and_variables(self, output_index: int) -> str:
+        left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        right_index: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_5"]
+        y_storage_index: int = self.reserved_cells["COMPARISON_TEMP_6"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [x_storage_index, y_storage_index, output_index]
+        )
+        instruction += self.__copy_cell(left_index, x_storage_index)
+        instruction += self.__copy_cell(right_index, y_storage_index)
+        instruction += self.__convert_cell_to_boolean(left_index)
+        instruction += self.__convert_cell_to_boolean(right_index)
+        instruction += ">" * left_index
+        instruction += "[-"
+        instruction += "<" * left_index
+        instruction += ">" * right_index
+        instruction += "[-"
+        instruction += "<" * right_index
+        instruction += ">" * output_index
+        instruction += "+"
+        instruction += "<" * output_index
+        instruction += ">" * right_index
+        instruction += "]"
+        instruction += "<" * right_index
+        instruction += ">" * left_index
+        instruction += "]"
+        instruction += "<" * left_index
+        instruction += self.__copy_cell(x_storage_index, left_index)
+        instruction += self.__copy_cell(y_storage_index, y_storage_index)
+
+        return instruction
 
     def __gt_variables(self, output_index: int) -> str:
         left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
@@ -783,14 +1118,14 @@ class BrainFogCompiler:
         instruction += self.__copy_cell(y_index, y_storage_index)
         instruction += self.__equal_variables(temp_index_1)
         instruction += self.__copy_cell(temp_index_1, x_index)
-        instruction += self.__boolean_not_variable(temp_index_1)
+        instruction += self.__bool_not_variable(temp_index_1)
         instruction += self.__copy_cell(temp_index_1, output_index)
         instruction += self.__copy_cell(x_storage_index, x_index)
         instruction += self.__copy_cell(y_storage_index, y_index)
 
         return instruction
 
-    def __boolean_not_variable(self, output_index: int) -> str:
+    def __bool_not_variable(self, output_index: int) -> str:
         left_index: int = self.reserved_cells["COMPARISON_INPUT_1"]
         temp_index_1: int = self.reserved_cells["COMPARISON_TEMP_1"]
         x_storage_index: int = self.reserved_cells["COMPARISON_TEMP_5"]
@@ -1114,16 +1449,20 @@ class BrainFogCompiler:
 
     def __set_variable(self, args) -> None:
         target_var: Variable = self.variables[args[0]]
-        value_type: BrainFogUserDataType = BrainFogUserDataType(args[2])
+        value_type: UserDataType = UserDataType(args[2])
         instruction: str = ""
         match value_type:
-            case BrainFogUserDataType.INT:
+            case UserDataType.INT:
                 new_value: int = int(args[3])
                 instruction += self.__set_cell_to_value(target_var.index, new_value)
-            case BrainFogUserDataType.BYTE:
+            case UserDataType.BOOL:
+                bool_value: BooleanValue = BooleanValue(args[3].upper())
+                new_value: int = 1 if bool_value == BooleanValue.TRUE else 0
+                instruction += self.__set_cell_to_value(target_var.index, new_value)
+            case UserDataType.BYTE:
                 new_value: int = ord(args[3][1])
                 instruction += self.__set_cell_to_value(target_var.index, new_value)
-            case BrainFogUserDataType.BYTE_ARRAY:
+            case UserDataType.BYTE_ARRAY:
                 value_args: List[str] = args[3:]
                 value_str: str = " ".join(value_args)
                 new_values: List[str] = list(
@@ -1137,16 +1476,26 @@ class BrainFogCompiler:
                         for index, character in enumerate(new_values)
                     ]
                 )
-            case BrainFogUserDataType.VAR:
+            case UserDataType.VAR:
                 providing_var: Variable = self.variables[args[3]]
-                instruction += "".join(
-                    [
-                        self.__copy_cell(
-                            providing_var.index + offset, target_var.index + offset
-                        )
-                        for offset in range(target_var.length)
-                    ]
-                )
+                target_var_index: int = target_var.index
+                providing_var_index: int = providing_var.index
+                if target_var.type == VarType.BOOL:
+                    temp_index_1: int = self.reserved_cells["GENERAL_TEMP_1"]
+                    temp_index_2: int = self.reserved_cells["GENERAL_TEMP_2"]
+                    instruction += self.__clear_cells([temp_index_1, temp_index_2])
+                    instruction += self.__copy_cell(providing_var_index, temp_index_2)
+                    instruction += self.__convert_cell_to_boolean(temp_index_2)
+                    instruction += self.__copy_cell(temp_index_2, target_var_index)
+                else:
+                    instruction += "".join(
+                        [
+                            self.__copy_cell(
+                                providing_var.index + offset, target_var.index + offset
+                            )
+                            for offset in range(target_var.length)
+                        ]
+                    )
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1180,11 +1529,14 @@ class BrainFogCompiler:
 
     def __create_variable(self, args) -> None:
         name: str = args[0]
-        match args[1]:
-            case "int":
+        var_type: UserDataType = UserDataType(args[1])
+        match var_type:
+            case UserDataType.INT:
                 self.variables[name] = IntegerVariable(index=self.var_offset)
-            case "byte":
+            case UserDataType.BYTE:
                 self.variables[name] = ByteVariable(index=self.var_offset)
+            case UserDataType.BOOL:
+                self.variables[name] = BooleanVariable(index=self.var_offset)
             case _:
                 length: int = int(args[1][5:-1])
                 self.variables[name] = ByteArrayVariable(

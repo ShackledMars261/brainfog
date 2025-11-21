@@ -9,6 +9,9 @@ var VAR_NAME VAR_TYPE
 Variable assignment to integer:
 set VAR_NAME = int VALUE
 
+Variable assignment to boolean:
+set VAR_NAME = bool TRUE/FALSE
+
 Variable assignment to byte:
 set VAR_NAME = byte "C" (any single ASCII character)
 
