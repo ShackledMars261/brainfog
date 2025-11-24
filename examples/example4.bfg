@@ -1,0 +1,31 @@
+var i int
+set i = int 3
+
+var decrement int
+set decrement = int 1
+
+var result int
+
+var msg1 byte[6]
+set msg1 = byte[] "Value "
+
+var msg2 byte[19]
+set msg2 = byte[] " is greater than 0."
+
+var line_break byte[1]
+set line_break = byte[] "\n"
+
+var num_offset int
+set num_offset = int 48
+var printable_i int
+
+
+while (var i > int 0)
+    add i num_offset printable_i
+    print msg1
+    print printable_i
+    print msg2
+    print line_break
+    sub i decrement result
+    set i = var result
+endwhile

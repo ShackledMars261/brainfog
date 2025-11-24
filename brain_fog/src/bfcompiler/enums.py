@@ -59,3 +59,5 @@ class OpCode(StrEnum):
     RAW = auto()
     IF = auto()
     ENDIF = auto()
+    WHILE = auto()
+    ENDWHILE = auto()

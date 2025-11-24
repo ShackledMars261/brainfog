@@ -52,4 +52,10 @@ if (TYPE VALUE COMPARISON_OPERATOR TYPE VALUE) (ex. "var x > int 3")
     OPERATION1
     OPERATION2
 endif
+
+While statements:
+while (TYPE VALUE COMPARISON_OPERATOR TYPE VALUE) (ex. "var x > int 3")
+    OPERATION1
+    OPERATION2
+endwhile
 ```

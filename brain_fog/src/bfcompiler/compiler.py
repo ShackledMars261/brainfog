@@ -1,4 +1,5 @@
 import copy
+import math
 import statistics
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Tuple
@@ -153,11 +154,12 @@ class BrainFogCompiler:
         ] = []  # [(instructions, pointer movement (i.e. -2 if shifting 2 spots left overall (None if unknown)))]
         self.output_str: str = ""
         self.current_pointer_location: int = 0
-        self.current_block_depth: int = 0
-
+        self.current_if_block_depth: int = 0
+        self.current_while_block_depth: int = 0
         self.reserved_cells: Dict[str, int] = {}
         self.var_offset: int = len(self.reserved_cells)
         self.bool_in_code: bool = False
+        self.stored_while_conditionals: Dict[int, str] = {}
 
     def __print(self, *args, **kwargs) -> None:
         """Wrapper for print"""
@@ -191,7 +193,8 @@ class BrainFogCompiler:
         data: List[str] = input.split("\n")
         lines: List[str] = []
 
-        block_depth: int = 0
+        if_block_depth: int = 0
+        while_block_depth: int = 0
 
         for line in data:
             line = line.strip()
@@ -209,11 +212,18 @@ class BrainFogCompiler:
                     self.bool_in_code = True
 
             if line.startswith("if"):
-                self.__reserve_new_cell(f"IF_{block_depth}")
-                block_depth += 1
+                self.__reserve_new_cell(f"IF_{if_block_depth}")
+                if_block_depth += 1
 
             if line.startswith("endif"):
-                block_depth -= 1
+                if_block_depth -= 1
+
+            if line.startswith("while"):
+                self.__reserve_new_cell(f"WHILE_{while_block_depth}")
+                while_block_depth += 1
+
+            if line.startswith("endwhile"):
+                while_block_depth -= 1
 
             self.__reserve_cells_for_line(line)
 
@@ -239,37 +249,221 @@ class BrainFogCompiler:
                     self.__reserve_cells(
                         ["COPYING", "GENERAL_TEMP_1", "GENERAL_TEMP_2"]
                     )
-            case OpCode.ADD:  # reserved_cells used: COPYING
-                self.__reserve_cells(["COPYING"])
-            case OpCode.SUB:  # reserved_cells used: COPYING
-                self.__reserve_cells(["COPYING"])
-            case OpCode.MUL:  # reserved_cells used: COPYING, MULT_1, MULT_2
-                self.__reserve_cells(["COPYING", "MULT_1", "MULT_2"])
+            case OpCode.ADD:  # reserved_cells used: COPYING, X_STORAGE, Y_STORAGE
+                self.__reserve_cells(["COPYING", "X_STORAGE", "Y_STORAGE"])
+            case OpCode.SUB:  # reserved_cells used: COPYING, X_STORAGE, Y_STORAGE
+                self.__reserve_cells(["COPYING", "X_STORAGE", "Y_STORAGE"])
             case (
-                OpCode.DIV
-            ):  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4
+                OpCode.MUL
+            ):  # reserved_cells used: COPYING, MULT_1, MULT_2, X_STORAGE, Y_STORAGE
                 self.__reserve_cells(
-                    ["COPYING", "DIVMOD_1", "DIVMOD_2", "DIVMOD_3", "DIVMOD_4"]
+                    ["COPYING", "MULT_1", "MULT_2", "X_STORAGE", "Y_STORAGE"]
                 )
-            case (
-                OpCode.MOD
-            ):  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4
+            case OpCode.DIV:  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4, X_STORAGE, Y_STORAGE
                 self.__reserve_cells(
-                    ["COPYING", "DIVMOD_1", "DIVMOD_2", "DIVMOD_3", "DIVMOD_4"]
+                    [
+                        "COPYING",
+                        "DIVMOD_1",
+                        "DIVMOD_2",
+                        "DIVMOD_3",
+                        "DIVMOD_4",
+                        "DIVMOD_5",  # Unused for division, but DIVMOD 1-6 must be defined together or it breaks Modulo. Will be fixed in the future
+                        "DIVMOD_6",  # Unused for division, but DIVMOD 1-6 must be defined together or it breaks Modulo. Will be fixed in the future
+                        "X_STORAGE",
+                        "Y_STORAGE",
+                    ]
                 )
-            case OpCode.POW:  # reserved_cells used: COPYING, MULT_1, MULT_2, POW_1
-                self.__reserve_cells(["COPYING", "MULT_1", "MULT_2", "POW_1"])
+            case OpCode.MOD:  # reserved_cells used: COPYING, DIVMOD_1, DIVMOD_2, DIVMOD_3, DIVMOD_4, DIVMOD_5, DIVMOD_6, X_STORAGE, Y_STORAGE
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "DIVMOD_1",
+                        "DIVMOD_2",
+                        "DIVMOD_3",
+                        "DIVMOD_4",
+                        "DIVMOD_5",
+                        "DIVMOD_6",
+                        "X_STORAGE",
+                        "Y_STORAGE",
+                    ]
+                )
+            case OpCode.POW:  # reserved_cells used: COPYING, MULT_1, MULT_2, POW_1, X_STORAGE, Y_STORAGE
+                self.__reserve_cells(
+                    ["COPYING", "MULT_1", "MULT_2", "POW_1", "X_STORAGE", "Y_STORAGE"]
+                )
             case OpCode.RAW:  # reserved_cells used: none
                 pass
             case OpCode.IF:  # reserved_cells used: COPYING, IF_{X} (already handled), COMPARISON_INPUT_1, COMPARISON_INPUT_2, MISC (Check comparison operators)
                 self.__reserve_cells(
                     ["COPYING", "COMPARISON_INPUT_1", "COMPARISON_INPUT_2"]
                 )
-                self.__reserve_cells_for_if_begin(args)
+                self.__reserve_cells_for_if_block(args)
             case OpCode.ENDIF:  # reserved_cells used: IF_{X} (already handled)
                 pass
+            case OpCode.WHILE:  # reserved_cells used: COPYING, WHILE_{X} (already handled), COMPARISON_INPUT_1, COMPARISON_INPUT_2, MISC (Check comparison operators)
+                self.__reserve_cells(
+                    ["COPYING", "COMPARISON_INPUT_1", "COMPARISON_INPUT_2"]
+                )
+                self.__reserve_cells_for_while_block(args)
+            case OpCode.ENDWHILE:  # reserved_cells used: WHILE_{X} (already handled)
+                pass
 
-    def __reserve_cells_for_if_begin(self, args: List[str]) -> None:
+    def __reserve_cells_for_while_block(self, args: List[str]) -> None:
+        comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
+        match comparison_operator:
+            case ComparisonOperator.GT:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.LT:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.GTE:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.LTE:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.EQUAL:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.NOT_EQUAL:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_2",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                    ]
+                )
+            case ComparisonOperator.BOOL_AND:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_OR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_NAND:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_NOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_XOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+            case ComparisonOperator.BOOL_XNOR:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_3, COMPARISON_TEMP_4, COMPARISON_TEMP_5, COMPARISON_TEMP_6, GENERAL_TEMP_1
+                self.__reserve_cells(
+                    [
+                        "COPYING",
+                        "COMPARISON_INPUT_1",
+                        "COMPARISON_INPUT_2",
+                        "COMPARISON_TEMP_1",
+                        "COMPARISON_TEMP_3",
+                        "COMPARISON_TEMP_4",
+                        "COMPARISON_TEMP_5",
+                        "COMPARISON_TEMP_6",
+                        "GENERAL_TEMP_1",
+                    ]
+                )
+
+    def __reserve_cells_for_if_block(self, args: List[str]) -> None:
         comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
         match comparison_operator:
             case ComparisonOperator.GT:  # reserved_cells used: COPYING, COMPARISON_INPUT_1, COMPARISON_INPUT_2, COMPARISON_TEMP_1, COMPARISON_TEMP_2, COMPARISON_TEMP_5, COMPARISON_TEMP_6
@@ -508,8 +702,12 @@ class BrainFogCompiler:
                     self.__begin_if_statement(args)
                 case OpCode.ENDIF:
                     self.__end_if_statement(args)
+                case OpCode.WHILE:
+                    self.__begin_while_statement(args)
+                case OpCode.ENDWHILE:
+                    self.__end_while_statement(args)
 
-        self.__print(f"Current Block Depth: {self.current_block_depth}")
+        self.__print(f"Current Block Depth: {self.current_if_block_depth}")
 
         self.__print("Variables:", end="")
         if len(self.variables) == 0:
@@ -527,10 +725,270 @@ class BrainFogCompiler:
         for name, cell_index in self.reserved_cells.items():
             self.__print(f" - {name}: {cell_index}")
 
+    def __end_while_statement(self, args) -> None:
+        args: List[str] = self.stored_while_conditionals[
+            str(self.current_while_block_depth - 1)
+        ].split(" ")
+        value_1_type: UserDataType = UserDataType(args[0][1:])
+        value_1_value_str: str = args[1]
+        value_1_value: int
+        comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
+        value_2_type: UserDataType = UserDataType(args[3])
+        value_2_value_str: str = args[4][:-1]
+        value_2_value: int
+        self.__print(f"END_WHILE: getting WHILE_{self.current_while_block_depth - 1}")
+        callback_index: int = self.reserved_cells[
+            f"WHILE_{self.current_while_block_depth - 1}"
+        ]  # stores result of comparison (x)
+        comparison_input_index_1: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        comparison_input_index_2: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [
+                callback_index,
+                comparison_input_index_1,
+                comparison_input_index_2,
+            ]
+        )
+
+        match value_1_type:
+            case UserDataType.INT:
+                value_1_value = int(value_1_value_str)
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BOOL:
+                value_1_value = (
+                    1
+                    if BooleanValue(value_1_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BYTE:
+                value_1_value = ord(value_1_value_str[1])
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BYTE_ARRAY:
+                value_1_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_1_value_str[1:-1]]
+                    )
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.VAR:
+                providing_var: Variable = self.variables[value_1_value_str]
+                instruction += self.__copy_cell(
+                    providing_var.index, comparison_input_index_1
+                )
+
+        match value_2_type:
+            case UserDataType.INT:
+                value_2_value = int(value_2_value_str)
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BOOL:
+                value_2_value = (
+                    1
+                    if BooleanValue(value_2_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BYTE:
+                value_2_value = ord(value_2_value_str[1])
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BYTE_ARRAY:
+                value_2_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_2_value_str[1:-1]]
+                    )
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.VAR:
+                providing_var: Variable = self.variables[value_2_value_str]
+                instruction += self.__copy_cell(
+                    providing_var.index, comparison_input_index_2
+                )
+
+        match comparison_operator:
+            case ComparisonOperator.GT:
+                instruction += self.__gt_variables(callback_index)
+            case ComparisonOperator.LT:
+                instruction += self.__lt_variables(callback_index)
+            case ComparisonOperator.GTE:
+                instruction += self.__gte_variables(callback_index)
+            case ComparisonOperator.LTE:
+                instruction += self.__lte_variables(callback_index)
+            case ComparisonOperator.EQUAL:
+                instruction += self.__equal_variables(callback_index)
+            case ComparisonOperator.NOT_EQUAL:
+                instruction += self.__not_equal_variables(callback_index)
+            case ComparisonOperator.BOOL_AND:
+                instruction += self.__bool_and_variables(callback_index)
+            case ComparisonOperator.BOOL_OR:
+                instruction += self.__bool_or_variables(callback_index)
+            case ComparisonOperator.BOOL_NAND:
+                instruction += self.__bool_nand_variables(callback_index)
+            case ComparisonOperator.BOOL_NOR:
+                instruction += self.__bool_nor_variables(callback_index)
+            case ComparisonOperator.BOOL_XOR:
+                instruction += self.__bool_xor_variables(callback_index)
+            case ComparisonOperator.BOOL_XNOR:
+                instruction += self.__bool_xnor_variables(callback_index)
+
+        instruction += ">" * callback_index
+        instruction += "]"
+        instruction += "<" * callback_index
+
+        self.__print(instruction)
+        self.current_while_block_depth -= 1
+        self.instructions.append((instruction, 0))
+
+    def __begin_while_statement(self, args) -> None:
+        self.stored_while_conditionals[str(self.current_while_block_depth)] = " ".join(
+            args
+        )
+        value_1_type: UserDataType = UserDataType(args[0][1:])
+        value_1_value_str: str = args[1]
+        value_1_value: int
+        comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
+        value_2_type: UserDataType = UserDataType(args[3])
+        value_2_value_str: str = args[4][:-1]
+        value_2_value: int
+        self.__print(f"BEGIN_WHILE: getting WHILE_{self.current_while_block_depth}")
+        callback_index: int = self.reserved_cells[
+            f"WHILE_{self.current_while_block_depth}"
+        ]  # stores result of comparison (x)
+        comparison_input_index_1: int = self.reserved_cells["COMPARISON_INPUT_1"]
+        comparison_input_index_2: int = self.reserved_cells["COMPARISON_INPUT_2"]
+        instruction: str = ""
+        instruction += self.__clear_cells(
+            [
+                callback_index,
+                comparison_input_index_1,
+                comparison_input_index_2,
+            ]
+        )
+
+        match value_1_type:
+            case UserDataType.INT:
+                value_1_value = int(value_1_value_str)
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BOOL:
+                value_1_value = (
+                    1
+                    if BooleanValue(value_1_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BYTE:
+                value_1_value = ord(value_1_value_str[1])
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.BYTE_ARRAY:
+                value_1_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_1_value_str[1:-1]]
+                    )
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_1, value_1_value
+                )
+            case UserDataType.VAR:
+                providing_var: Variable = self.variables[value_1_value_str]
+                instruction += self.__copy_cell(
+                    providing_var.index, comparison_input_index_1
+                )
+
+        match value_2_type:
+            case UserDataType.INT:
+                value_2_value = int(value_2_value_str)
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BOOL:
+                value_2_value = (
+                    1
+                    if BooleanValue(value_2_value_str.upper()) == BooleanValue.TRUE
+                    else 0
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BYTE:
+                value_2_value = ord(value_2_value_str[1])
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.BYTE_ARRAY:
+                value_2_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_2_value_str[1:-1]]
+                    )
+                )
+                instruction += self.__set_cell_to_value(
+                    comparison_input_index_2, value_2_value
+                )
+            case UserDataType.VAR:
+                providing_var: Variable = self.variables[value_2_value_str]
+                instruction += self.__copy_cell(
+                    providing_var.index, comparison_input_index_2
+                )
+
+        match comparison_operator:
+            case ComparisonOperator.GT:
+                instruction += self.__gt_variables(callback_index)
+            case ComparisonOperator.LT:
+                instruction += self.__lt_variables(callback_index)
+            case ComparisonOperator.GTE:
+                instruction += self.__gte_variables(callback_index)
+            case ComparisonOperator.LTE:
+                instruction += self.__lte_variables(callback_index)
+            case ComparisonOperator.EQUAL:
+                instruction += self.__equal_variables(callback_index)
+            case ComparisonOperator.NOT_EQUAL:
+                instruction += self.__not_equal_variables(callback_index)
+            case ComparisonOperator.BOOL_AND:
+                instruction += self.__bool_and_variables(callback_index)
+            case ComparisonOperator.BOOL_OR:
+                instruction += self.__bool_or_variables(callback_index)
+            case ComparisonOperator.BOOL_NAND:
+                instruction += self.__bool_nand_variables(callback_index)
+            case ComparisonOperator.BOOL_NOR:
+                instruction += self.__bool_nor_variables(callback_index)
+            case ComparisonOperator.BOOL_XOR:
+                instruction += self.__bool_xor_variables(callback_index)
+            case ComparisonOperator.BOOL_XNOR:
+                instruction += self.__bool_xnor_variables(callback_index)
+
+        instruction += ">" * callback_index
+        instruction += "["
+        instruction += "<" * callback_index
+
+        self.__print(instruction)
+        self.current_while_block_depth += 1
+        self.instructions.append((instruction, 0))
+
     def __end_if_statement(self, args) -> None:
-        self.__print(f"END_IF: getting IF_{self.current_block_depth - 1}")
+        self.__print(f"END_IF: getting IF_{self.current_if_block_depth - 1}")
         temp_index_1: int = self.reserved_cells[
-            f"IF_{self.current_block_depth - 1}"
+            f"IF_{self.current_if_block_depth - 1}"
         ]  # stores result of comparison (x)
         instruction: str = ""
         instruction += self.__clear_cell(temp_index_1)
@@ -539,7 +997,7 @@ class BrainFogCompiler:
         instruction += "<" * temp_index_1
 
         self.__print(instruction)
-        self.current_block_depth -= 1
+        self.current_if_block_depth -= 1
         self.instructions.append((instruction, 0))
 
     def __begin_if_statement(self, args) -> None:
@@ -549,9 +1007,10 @@ class BrainFogCompiler:
         comparison_operator: ComparisonOperator = ComparisonOperator(args[2])
         value_2_type: UserDataType = UserDataType(args[3])
         value_2_value_str: str = args[4][:-1]
-        self.__print(f"BEGIN_IF: getting IF_{self.current_block_depth}")
+        value_2_value: int
+        self.__print(f"BEGIN_IF: getting IF_{self.current_if_block_depth}")
         temp_index_1: int = self.reserved_cells[
-            f"IF_{self.current_block_depth}"
+            f"IF_{self.current_if_block_depth}"
         ]  # stores result of comparison (x)
         temp_index_2: int = self.reserved_cells["COMPARISON_INPUT_1"]
         temp_index_3: int = self.reserved_cells["COMPARISON_INPUT_2"]
@@ -579,8 +1038,10 @@ class BrainFogCompiler:
                 value_1_value = ord(value_1_value_str[1])
                 instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
             case UserDataType.BYTE_ARRAY:
-                value_1_value = statistics.mean(
-                    [ord(character) for character in value_1_value_str[1:-1]]
+                value_1_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_1_value_str[1:-1]]
+                    )
                 )
                 instruction += self.__set_cell_to_value(temp_index_2, value_1_value)
             case UserDataType.VAR:
@@ -602,8 +1063,10 @@ class BrainFogCompiler:
                 value_2_value = ord(value_2_value_str[1])
                 instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
             case UserDataType.BYTE_ARRAY:
-                value_2_value = statistics.mean(
-                    [ord(character) for character in value_2_value_str[1:-1]]
+                value_2_value = math.round(
+                    statistics.mean(
+                        [ord(character) for character in value_2_value_str[1:-1]]
+                    )
                 )
                 instruction += self.__set_cell_to_value(temp_index_3, value_2_value)
             case UserDataType.VAR:
@@ -641,7 +1104,7 @@ class BrainFogCompiler:
         instruction += "<" * temp_index_1
 
         self.__print(instruction)
-        self.current_block_depth += 1
+        self.current_if_block_depth += 1
         self.instructions.append((instruction, 0))
 
     def __bool_xnor_variables(self, output_index: int) -> str:
@@ -1163,6 +1626,8 @@ class BrainFogCompiler:
         temp_index_1: int = self.reserved_cells["MULT_1"]
         temp_index_2: int = self.reserved_cells["MULT_2"]
         temp_index_3: int = self.reserved_cells["POW_1"]
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         instruction: str = ""
         instruction += self.__clear_cells(
             [
@@ -1170,8 +1635,12 @@ class BrainFogCompiler:
                 temp_index_1,
                 temp_index_2,
                 temp_index_3,
+                x_storage_index,
+                y_storage_index,
             ]
         )
+        instruction += self.__copy_cell(index_1, x_storage_index)
+        instruction += self.__copy_cell(index_2, y_storage_index)
         instruction += self.__copy_cell(index_2, temp_index_3)
         instruction += ">" * temp_index_3
         instruction += "["
@@ -1196,6 +1665,8 @@ class BrainFogCompiler:
         instruction += ">" * temp_index_3
         instruction += "-]"
         instruction += "<" * temp_index_3
+        instruction += self.__copy_cell(x_storage_index, index_1)
+        instruction += self.__copy_cell(y_storage_index, index_2)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1207,27 +1678,40 @@ class BrainFogCompiler:
         index_1: int = left_input_var.index
         index_2: int = right_input_var.index
         output_index: int = output_var.index
-        temp_index_1: int = self.reserved_cells["DIVMOD_1"]
-        temp_index_2: int = self.reserved_cells["DIVMOD_2"]
-        temp_index_3: int = self.reserved_cells["DIVMOD_3"]
-        temp_index_4: int = self.reserved_cells["DIVMOD_4"]
+        temp_index_0: int = self.reserved_cells["DIVMOD_1"]
+        temp_index_1: int = self.reserved_cells["DIVMOD_2"]
+        temp_index_2: int = self.reserved_cells["DIVMOD_3"]
+        temp_index_3: int = self.reserved_cells["DIVMOD_4"]
+        temp_index_4: int = self.reserved_cells["DIVMOD_5"]
+        temp_index_5: int = self.reserved_cells["DIVMOD_6"]
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         instruction: str = ""
         instruction += self.__clear_cells(
             [
                 output_index,
+                temp_index_0,
                 temp_index_1,
                 temp_index_2,
                 temp_index_3,
                 temp_index_4,
+                temp_index_5,
+                x_storage_index,
+                y_storage_index,
             ]
         )
+        instruction += self.__copy_cell(index_1, x_storage_index)
+        instruction += self.__copy_cell(index_2, y_storage_index)
+
         instruction += self.__copy_cell(index_1, temp_index_1)
         instruction += self.__copy_cell(index_2, temp_index_2)
-        instruction += self.__set_cell_to_value(temp_index_3, 1)
         instruction += ">" * temp_index_1
-        instruction += "[->-[>+>>]>[+[-<+>]>+>>]<<<<<]"  # ripped from https://esolangs.org/wiki/Brainfuck_algorithms
+        instruction += "[>->+<[>]>[<+>-]<<[<]>-]"  # ripped from https://esolangs.org/wiki/Brainfuck_algorithms
         instruction += "<" * temp_index_1
         instruction += self.__copy_cell(temp_index_3, output_index)
+
+        instruction += self.__copy_cell(x_storage_index, index_1)
+        instruction += self.__copy_cell(y_storage_index, index_2)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1236,30 +1720,114 @@ class BrainFogCompiler:
         left_input_var: Variable = self.variables[args[0]]
         right_input_var: Variable = self.variables[args[1]]
         output_var: Variable = self.variables[args[2]]
-        index_1: int = left_input_var.index
-        index_2: int = right_input_var.index
+        x_index: int = left_input_var.index
+        y_index: int = right_input_var.index
         output_index: int = output_var.index
-        temp_index_1: int = self.reserved_cells["DIVMOD_1"]
-        temp_index_2: int = self.reserved_cells["DIVMOD_2"]
-        temp_index_3: int = self.reserved_cells["DIVMOD_3"]
-        temp_index_4: int = self.reserved_cells["DIVMOD_4"]
+        temp_index_0: int = self.reserved_cells["DIVMOD_1"]
+        temp_index_1: int = self.reserved_cells["DIVMOD_2"]
+        temp_index_2: int = self.reserved_cells["DIVMOD_3"]
+        temp_index_3: int = self.reserved_cells["DIVMOD_4"]
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         instruction: str = ""
         instruction += self.__clear_cells(
             [
                 output_index,
+                temp_index_0,
                 temp_index_1,
                 temp_index_2,
                 temp_index_3,
-                temp_index_4,
+                x_storage_index,
+                y_storage_index,
             ]
         )
-        instruction += self.__copy_cell(index_1, temp_index_1)
-        instruction += self.__copy_cell(index_2, temp_index_2)
-        instruction += self.__set_cell_to_value(temp_index_3, 1)
+        instruction += self.__copy_cell(x_index, x_storage_index)
+        instruction += self.__copy_cell(y_index, y_storage_index)
+        instruction += ">" * x_index
+        instruction += "["
+        instruction += "<" * x_index
+        instruction += ">" * temp_index_0
+        instruction += "+"
+        instruction += "<" * temp_index_0
+        instruction += ">" * x_index
+        instruction += "-]"
+        instruction += "<" * x_index
+        instruction += ">" * temp_index_0
+        instruction += "["
+        instruction += "<" * temp_index_0
+        instruction += ">" * y_index
+        instruction += "["
+        instruction += "<" * y_index
         instruction += ">" * temp_index_1
-        instruction += "[->-[>+>>]>[+[-<+>]>+>>]<<<<<]"  # ripped from https://esolangs.org/wiki/Brainfuck_algorithms
+        instruction += "+"
         instruction += "<" * temp_index_1
-        instruction += self.__copy_cell(temp_index_4, output_index)
+        instruction += ">" * temp_index_2
+        instruction += "+"
+        instruction += "<" * temp_index_2
+        instruction += ">" * y_index
+        instruction += "-]"
+        instruction += "<" * y_index
+        instruction += ">" * temp_index_2
+        instruction += "["
+        instruction += "<" * temp_index_2
+        instruction += ">" * y_index
+        instruction += "+"
+        instruction += "<" * y_index
+        instruction += ">" * temp_index_2
+        instruction += "-]"
+        instruction += "<" * temp_index_2
+        instruction += ">" * temp_index_1
+        instruction += "["
+        instruction += "<" * temp_index_1
+        instruction += ">" * temp_index_2
+        instruction += "+"
+        instruction += "<" * temp_index_2
+        instruction += ">" * temp_index_0
+        instruction += "-["
+        instruction += "<" * temp_index_0
+        instruction += self.__clear_cell(temp_index_2)
+        instruction += ">" * temp_index_3
+        instruction += "+"
+        instruction += "<" * temp_index_3
+        instruction += ">" * temp_index_0
+        instruction += "-]"
+        instruction += "<" * temp_index_0
+        instruction += ">" * temp_index_3
+        instruction += "["
+        instruction += "<" * temp_index_3
+        instruction += ">" * temp_index_0
+        instruction += "+"
+        instruction += "<" * temp_index_0
+        instruction += ">" * temp_index_3
+        instruction += "-]"
+        instruction += "<" * temp_index_3
+        instruction += ">" * temp_index_2
+        instruction += "["
+        instruction += "<" * temp_index_2
+        instruction += ">" * temp_index_1
+        instruction += "-["
+        instruction += "<" * temp_index_1
+        instruction += ">" * x_index
+        instruction += "-"
+        instruction += "<" * x_index
+        instruction += ">" * temp_index_1
+        instruction += "[-]]+"
+        instruction += "<" * temp_index_1
+        instruction += ">" * temp_index_2
+        instruction += "-]"
+        instruction += "<" * temp_index_2
+        instruction += ">" * temp_index_1
+        instruction += "-]"
+        instruction += "<" * temp_index_1
+        instruction += ">" * x_index
+        instruction += "+"
+        instruction += "<" * x_index
+        instruction += ">" * temp_index_0
+        instruction += "]"
+        instruction += "<" * temp_index_0
+        instruction += self.__copy_cell(x_index, output_index)
+        instruction += self.__copy_cell(x_storage_index, x_index)
+        instruction += self.__copy_cell(y_storage_index, y_index)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1273,8 +1841,14 @@ class BrainFogCompiler:
         output_index: int = output_var.index
         temp_index_1: int = self.reserved_cells["MULT_1"]
         temp_index_2: int = self.reserved_cells["MULT_2"]
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         instruction: str = ""
-        instruction += self.__clear_cells([output_index, temp_index_1, temp_index_2])
+        instruction += self.__clear_cells(
+            [output_index, temp_index_1, temp_index_2, x_storage_index, y_storage_index]
+        )
+        instruction += self.__copy_cell(index_1, x_storage_index)
+        instruction += self.__copy_cell(index_2, y_storage_index)
         instruction += self.__copy_cell(index_1, temp_index_1)
         instruction += ">" * temp_index_1
         instruction += "["
@@ -1292,6 +1866,8 @@ class BrainFogCompiler:
         instruction += ">" * temp_index_1
         instruction += "-]"
         instruction += "<" * temp_index_1
+        instruction += self.__copy_cell(x_storage_index, index_1)
+        instruction += self.__copy_cell(y_storage_index, index_2)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1377,9 +1953,15 @@ class BrainFogCompiler:
         output_var: Variable = self.variables[args[2]]
         index_1: int = left_input_var.index
         index_2: int = right_input_var.index
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         output_index: int = output_var.index
         instruction: str = ""
-        instruction += self.__clear_cell(output_index)
+        instruction += self.__clear_cells(
+            [output_index, x_storage_index, y_storage_index]
+        )
+        instruction += self.__copy_cell(index_1, x_storage_index)
+        instruction += self.__copy_cell(index_2, y_storage_index)
         instruction += self.__copy_cell(index_1, output_index)
         instruction += ">" * index_2
         instruction += "["
@@ -1390,6 +1972,8 @@ class BrainFogCompiler:
         instruction += ">" * index_2
         instruction += "-]"
         instruction += "<" * index_2
+        instruction += self.__copy_cell(x_storage_index, index_1)
+        instruction += self.__copy_cell(y_storage_index, index_2)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
@@ -1400,9 +1984,15 @@ class BrainFogCompiler:
         output_var: Variable = self.variables[args[2]]
         index_1: int = left_input_var.index
         index_2: int = right_input_var.index
+        x_storage_index: int = self.reserved_cells["X_STORAGE"]
+        y_storage_index: int = self.reserved_cells["Y_STORAGE"]
         output_index: int = output_var.index
         instruction: str = ""
-        instruction += self.__clear_cell(output_index)
+        instruction += self.__clear_cells(
+            [output_index, x_storage_index, y_storage_index]
+        )
+        instruction += self.__copy_cell(index_1, x_storage_index)
+        instruction += self.__copy_cell(index_2, y_storage_index)
         instruction += self.__copy_cell(index_1, output_index)
         instruction += ">" * index_2
         instruction += "["
@@ -1413,6 +2003,8 @@ class BrainFogCompiler:
         instruction += ">" * index_2
         instruction += "-]"
         instruction += "<" * index_2
+        instruction += self.__copy_cell(x_storage_index, index_1)
+        instruction += self.__copy_cell(y_storage_index, index_2)
 
         self.__print(instruction)
         self.instructions.append((instruction, 0))
