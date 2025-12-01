@@ -136,8 +136,9 @@ class ByteArrayVariable(Variable):
         return self._value
 
     @value.setter
-    def value(self, new_value: int, index: int):
-        self._value[index] = new_value
+    def value(self, new_value: List[int]):
+        for index, value in enumerate(new_value):
+            self._value[index] = value
 
     @value.deleter
     def value(self):
@@ -631,7 +632,7 @@ class BrainFogCompiler:
     def __optimize_instruction(self, instruction: str) -> str:
         output: str = copy.deepcopy(instruction)
 
-        while not (len(output) == len(self.__optimize_instruction_step(output))):
+        while len(output) != len(self.__optimize_instruction_step(output)):
             output = self.__optimize_instruction_step(output)
 
         return output
@@ -705,7 +706,7 @@ class BrainFogCompiler:
                 case OpCode.WHILE:
                     self.__begin_while_statement(args)
                 case OpCode.ENDWHILE:
-                    self.__end_while_statement(args)
+                    self.__end_while_statement()
 
         self.__print(f"Current Block Depth: {self.current_if_block_depth}")
 
@@ -725,7 +726,7 @@ class BrainFogCompiler:
         for name, cell_index in self.reserved_cells.items():
             self.__print(f" - {name}: {cell_index}")
 
-    def __end_while_statement(self, args) -> None:
+    def __end_while_statement(self) -> None:
         args: List[str] = self.stored_while_conditionals[
             str(self.current_while_block_depth - 1)
         ].split(" ")
